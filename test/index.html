@@ -15,6 +15,9 @@
     <div>{{$store.getters.addCount}}</div>
     <button @click="add">加一</button>
     <button @click="reduce">减一</button>
+
+    <button @click="addModuleA">模块加一</button>
+    <div>{{$store.state.a.count}}</div>
   </div>
 </body>
 <script>
@@ -43,10 +46,27 @@
     },
     actions: {
       reduce({commit, dispatch}, payload) {
-        console.log(this)
         setTimeout(() => {
           commit('reduce', payload)
         }, 1000)
+      }
+    },
+    modules: {
+      a: {
+        state: {
+          name: 'moduleA',
+          count: 100
+        },
+        mutations: {
+          addModuleA( state, payload ) {
+            state.count += payload
+          }
+        }
+      },
+      b: {
+        state: {
+          name: 'moduleB'
+        }
       }
     }
   })
@@ -66,6 +86,9 @@
       },
       reduce() {
         this.$store.dispatch('reduce', 10)
+      },
+      addModuleA() {
+        this.$store.commit('addModuleA', 1)
       }
     },
     mounted() {

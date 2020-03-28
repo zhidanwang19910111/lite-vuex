@@ -17,11 +17,11 @@
       // 它将影响每一个之后创建的 Vue 实例, 通过这个方法我们可以给所有的组件都添加上一个  $store, 
       // 通过这个方法我们可以看出来，vue是先渲染父组件再渲染子组件， 深度优先
   var Vue
-function forEach (obj, callback) {
-  Object.keys(obj).forEach(function(key) {
-    callback && callback(key, obj[key])
-  })
-}
+  function forEach (obj, callback) {
+    Object.keys(obj).forEach(function(key) {
+      callback && callback(key, obj[key])
+    })
+  }
   var install = function(_Vue) {
     Vue = _Vue
 
@@ -58,57 +58,122 @@ function forEach (obj, callback) {
       }
     })
     // # 三、处理  store的  getters, (相当于 vue的 computed的属性)
-    var store = this // 这里存储一下  this
-    var getters = options.getters || {}
     this.getters = {}
-    forEach(getters, function(key, value) {
-      Object.defineProperty(this.getters, key, {
-        enumerable: true,
-        configurable: true,
-        get: function() {
-          return value( store.state )
-        }
-      })
-    }.bind(this))
-
-    // # 四、处理  store 的  mutations 
-    var mutations = options.mutations || {}
     this.mutations = {}
-    forEach(mutations, function(key, value) {
-      this.mutations[key] = function(payload) {
-        value(store.state, payload )
-      }
-    }.bind(this))
-
-    // # 五、处理 store 的 actions
-    var actions = options.actions || {}
     this.actions = {}
-    forEach( actions, function(key, value) {
-      this.actions[key] = function(payload) {
-        value(store, payload)
-      }
-    }.bind(this))
-    console.log(this)
+
     // actions commit 的时候  this是 window ，所以会找不到 触发的 commit函数名， 解决办法就是 先定义一个commit 和  dispatch
-    var commit = store.commit, dispatch = store.dispatch
+    var commit = this.commit, dispatch = this.dispatch
     this.commit = function(type, payload) {
       commit.call(this, type, payload )
     }.bind(this)
     this.dispatch = function(type, payload) {
       dispatch.call(this, type, payload)
     }.bind(this)
+
+    // 六 为 store 添加  mudules, 需要先格式化一下当前的用户传递过来的数据, 分为两个部分，收集模块 和 安装模块
+    // 所以上面写的 state, getters, mutations, actions, 都可以通过  安装模块的方法写入
+    // 收集模块
+    this.modules = new ModuleCollection( options )
+    console.log(this.modules)
+    // 安装模块
+    installModule(this, this.state, [], this.modules.root)
+    
   }
   // 同步提交
   Store.prototype.commit = function(type, payload) {
-    this.mutations[type](payload)
+    this.mutations[type].forEach( function(item) {
+      item(payload)
+    } )
   }
   // 异步提交
   Store.prototype.dispatch = function(type, payload) {
-    this.actions[type](payload)
+    this.actions[type].forEach( function(item) {
+      item(payload)
+    })
+  }
+  // 收集模块
+  function ModuleCollection( rootModule ) {
+    this.register([], rootModule)
+  }
+  ModuleCollection.prototype.register = function( path, rootModule ) {
+    let newModule = {
+      _raw: rootModule,
+      _children: {},
+      state: rootModule.state
+    }
+    
+    if( path.length === 0 ) {
+      this.root = newModule
+    }else {
+      let parent = path.slice(0, -1).reduce( function(root, cur) {
+        return root._children[ cur ]
+      }, this.root)
+      parent._children[path[ path.length - 1 ]] = newModule
+    }
+    if( rootModule.modules ) {
+      forEach( rootModule.modules, function( moduleName, module ) {
+        this.register( path.concat(moduleName), module )
+      }.bind(this))
+    }
+  }
+  // 安装模块
+  function installModule( store, state, path, rootModule ) {
+    // 安装模块的  state
+    if( path.length > 0 ) {
+      let parent = path.slice(0, -1).reduce(function(state, cur) {
+        return state[cur]
+      }, state)
+      Vue.set(parent, path[path.length - 1], rootModule.state )
+    }
+    // 需要递归 将结果挂载 getters, mutations, actions
+    var getters = rootModule._raw.getters
+    if( getters ) { // 给 store 增加了getters 属性
+      forEach(getters, function(key, value) {
+        Object.defineProperty(store.getters, key, {
+          enumerable: true,
+          configurable: true,
+          get: function() {
+            return value( rootModule.state )
+          }
+        })
+      })
+    }
+    // 处理mutations
+    var mutations = rootModule._raw.mutations
+    if( mutations ) {
+      forEach(mutations, function(key, value) {
+        store.mutations[key] = store.mutations[key] || []
+        store.mutations[key].push(function(payload) {
+          value(rootModule.state, payload )
+        })
+      })
+    }
+    // 处理actions
+    var actions = rootModule._raw.actions
+    if( actions ) {
+      forEach( actions, function(key, value) {
+        store.actions[key] = store.actions[key] || []
+        store.actions[key].push( function(payload) {
+          value(store, payload)
+        })
+      })
+    }
+    if( rootModule._children ) {
+      forEach( rootModule._children, function(moduleName, module) {
+        installModule( store, state, path.concat(moduleName), module )
+      })
+    }
+    
   }
   return {
     install: install,
     Store: Store
   }
 }))
+
+// namespace  命名空间
+// registerModules  如何动态注册模块
+// store.subscribe()  中间件
+
 

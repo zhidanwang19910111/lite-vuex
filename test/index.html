@@ -6,7 +6,6 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Vue</title>
     <script src="./vue.js"></script>
-    <!-- <script src="./lib/vuex.js"></script> -->
     <script src="../src/lite-vuex.js"></script>
 </head>
 <body>
@@ -26,7 +25,8 @@
     state: {
       name: 'store',
       count: 0,
-      arr: [1,3,4]
+      arr: [1,3,4],
+      a: 123
     },
     getters: {
       addCount( state ) {
